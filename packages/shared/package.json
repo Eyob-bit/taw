@@ -1,0 +1,20 @@
+{
+  "name": "@taw/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./constants": "./src/constants.js",
+    "./i18n": "./src/i18n.js",
+    "./sanitizer": "./src/sanitizer.js",
+    "./validators": "./src/validators.js"
+  },
+  "scripts": {
+    "build": "node -e \"console.log('@taw/shared ready')\"",
+    "test": "node --test"
+  },
+  "dependencies": {}
+}
+

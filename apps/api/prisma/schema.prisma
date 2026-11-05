@@ -1,0 +1,265 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum SubmissionStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  READY_TO_PUBLISH
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  REMOVED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  MODERATOR
+  SUPPORT_ADMIN
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum AttachmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id               String          @id @default(uuid())
+  telegramId       BigInt          @unique
+  telegramUsername String?
+  firstName        String?
+  lastName         String?
+  languageCode     String          @default("am")
+  isBlocked        Boolean         @default(false)
+  blockReason      String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  submissions      Submission[]
+  botSessions      BotSession[]
+  reports          Report[]
+  commentReports   CommentReport[]
+
+  @@index([telegramId])
+  @@index([isBlocked])
+}
+
+model Category {
+  id             String       @id @default(uuid())
+  code           String       @unique
+  nameEn         String
+  nameAm         String
+  descriptionEn  String?
+  descriptionAm  String?
+  hashtag        String
+  requiresReview Boolean      @default(false)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  submissions    Submission[]
+
+  @@index([code])
+}
+
+model Submission {
+  id                      String             @id @default(uuid())
+  submissionNumber        Int                @default(autoincrement()) @unique
+  userId                  String
+  categoryId              String
+  status                  SubmissionStatus   @default(DRAFT)
+  originalContent         String             @db.Text
+  publicContent           String?            @db.Text
+  language                String             @default("am")
+  isEligibleForAutoPublish Boolean            @default(false)
+  eligibilityReasons      Json?
+  detectedPii             Json?
+  sensitiveKeywords       Json?
+  userConfirmedAt         DateTime?
+  scheduledPublishAt      DateTime?
+  publishedAt             DateTime?
+  rejectionReason         String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category                Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  attachments             Attachment[]
+  moderationActions       ModerationAction[]
+  publication             Publication?
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Attachment {
+  id                 String           @id @default(uuid())
+  submissionId       String
+  fileKey            String
+  originalFileName   String?
+  mimeType           String
+  fileSize           Int
+  status             AttachmentStatus @default(PENDING)
+  isIdentifiableFace Boolean          @default(false)
+  isApprovedForPublic Boolean         @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  submission         Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+model Admin {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  passwordHash      String
+  fullName          String
+  role              AdminRole          @default(MODERATOR)
+  isActive          Boolean            @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  moderationActions ModerationAction[]
+  auditLogs         AuditLog[]
+
+  @@index([email])
+}
+
+model ModerationAction {
+  id                String            @id @default(uuid())
+  submissionId      String
+  adminId           String
+  actionType        String
+  note              String?
+  previousStatus    SubmissionStatus?
+  newStatus         SubmissionStatus?
+  publicContentDiff String?           @db.Text
+  createdAt         DateTime          @default(now())
+
+  submission        Submission        @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  admin             Admin             @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([adminId])
+}
+
+model Publication {
+  id                  String       @id @default(uuid())
+  submissionId        String       @unique
+  channelId           String
+  messageId           BigInt
+  discussionGroupId   String?
+  discussionMessageId BigInt?
+  postText            String       @db.Text
+  status              String       @default("ACTIVE")
+  publishedAt         DateTime     @default(now())
+  removedAt           DateTime?
+  removedReason       String?
+
+  submission          Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reports             Report[]
+
+  @@index([channelId, messageId])
+}
+
+model Report {
+  id                String       @id @default(uuid())
+  publicationId     String
+  reporterUserId    String?
+  reason            String
+  details           String?      @db.Text
+  status            ReportStatus @default(PENDING)
+  resolvedByAdminId String?
+  resolutionNotes   String?
+  resolvedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  publication       Publication  @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  reporterUser      User?        @relation(fields: [reporterUserId], references: [id], onDelete: SetNull)
+
+  @@index([publicationId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  adminId    String?
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  admin      Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([adminId])
+  @@index([entityType, entityId])
+}
+
+model BlockedUser {
+  id               String   @id @default(uuid())
+  telegramId       BigInt   @unique
+  reason           String
+  blockedByAdminId String?
+  createdAt        DateTime @default(now())
+
+  @@index([telegramId])
+}
+
+model BotSession {
+  id                   String   @id @default(uuid())
+  telegramId           BigInt   @unique
+  userId               String?
+  state                String   @default("IDLE")
+  draftCategoryId      String?
+  draftOriginalContent String?  @db.Text
+  draftPublicContent   String?  @db.Text
+  draftLanguage        String   @default("am")
+  hasAgreedGuidelines  Boolean  @default(false)
+  metadata             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([telegramId])
+}
+
+model CommentReport {
+  id                 String       @id @default(uuid())
+  channelId          String
+  discussionGroupId  String
+  messageId          BigInt
+  reporterTelegramId BigInt?
+  reason             String
+  status             ReportStatus @default(PENDING)
+  resolvedAt         DateTime?
+  createdAt          DateTime     @default(now())
+
+  user               User?        @relation(fields: [reporterTelegramId], references: [telegramId], onDelete: SetNull)
+
+  @@index([channelId, messageId])
+}
+

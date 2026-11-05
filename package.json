@@ -1,0 +1,30 @@
+{
+  "name": "relationship-awareness-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ethiopian Relationship Awareness & Community Platform",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:api",
+    "dev:all": "concurrently \"npm run dev:api\" \"npm run dev:bot\" \"npm run dev:admin\"",
+    "dev:api": "npm --workspace=@taw/api run dev",
+    "dev:bot": "npm --workspace=@taw/bot run dev",
+    "dev:admin": "npm --workspace=@taw/admin run dev",
+    "build": "npm --workspace=@taw/shared run build && npm --workspace=@taw/api run build && npm --workspace=@taw/admin run build",
+    "test": "npm --workspaces run test --if-present",
+    "prisma:generate": "npm --workspace=@taw/api run prisma:generate",
+    "prisma:migrate": "npm --workspace=@taw/api run prisma:migrate",
+    "prisma:seed": "npm --workspace=@taw/api run prisma:seed",
+    "prisma:studio": "npm --workspace=@taw/api run prisma:studio"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "optionalDependencies": {
+    "@rollup/wasm-node": "^4.67.4"
+  }
+}
