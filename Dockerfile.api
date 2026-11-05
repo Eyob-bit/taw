@@ -1,0 +1,37 @@
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy root manifest and workspace manifests
+COPY package*.json ./
+COPY packages/shared/package*.json ./packages/shared/
+COPY apps/api/package*.json ./apps/api/
+COPY apps/bot/package*.json ./apps/bot/
+COPY apps/admin/package*.json ./apps/admin/
+
+# Install dependencies
+RUN npm ci
+
+# Copy application source
+COPY packages/shared/ ./packages/shared/
+COPY apps/api/ ./apps/api/
+
+# Generate Prisma Client
+RUN npm --workspace=@taw/api run prisma:generate
+
+# Build packages
+RUN npm --workspace=@taw/shared run build
+RUN npm --workspace=@taw/api run build
+
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=4000
+
+COPY --from=builder /app /app
+
+EXPOSE 4000
+
+CMD ["sh", "-c", "npm --workspace=@taw/api run prisma:deploy && npm --workspace=@taw/api run prisma:seed && npm --workspace=@taw/api start"]
