@@ -11,32 +11,51 @@ let isRedisAvailable = false;
 
 function buildRedisConnection() {
   try {
-    if (config.redis.url && config.redis.url !== 'redis://localhost:6379') {
-      const isTls = config.redis.url.startsWith('rediss://');
-      return new Redis(config.redis.url, {
+    // Only attempt Redis connection if a non-localhost REDIS_URL is provided in production,
+    // or if REDIS_URL/host is explicitly provided in development.
+    const isProd = process.env.NODE_ENV === 'production';
+    const redisUrl = config.redis.url;
+
+    if (isProd && (!redisUrl || redisUrl.includes('localhost') || redisUrl.includes('127.0.0.1'))) {
+      return null;
+    }
+
+    let client = null;
+    if (redisUrl && !redisUrl.includes('localhost')) {
+      const isTls = redisUrl.startsWith('rediss://');
+      client = new Redis(redisUrl, {
         maxRetriesPerRequest: null,
-        connectTimeout: 5000,
+        connectTimeout: 4000,
         lazyConnect: true,
-        retryStrategy: (times) => (times > 3 ? null : Math.min(times * 1000, 3000)),
+        retryStrategy: (times) => (times > 2 ? null : Math.min(times * 1000, 2000)),
         ...(isTls ? { tls: { rejectUnauthorized: false } } : {})
+      });
+    } else if (!isProd) {
+      client = new Redis({
+        host: config.redis.host,
+        port: config.redis.port,
+        maxRetriesPerRequest: null,
+        connectTimeout: 2000,
+        lazyConnect: true,
+        retryStrategy: (times) => (times > 2 ? null : Math.min(times * 1000, 2000))
       });
     }
 
-    return new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      maxRetriesPerRequest: null,
-      connectTimeout: 2000,
-      lazyConnect: true,
-      retryStrategy: (times) => (times > 3 ? null : Math.min(times * 1000, 3000))
-    });
+    if (client) {
+      // Prevent unhandled error events from crashing the process
+      client.on('error', (err) => {
+        isRedisAvailable = false;
+        // Suppress noisy reconnection errors in logs
+      });
+    }
+
+    return client;
   } catch (err) {
-    console.warn('[Queue] Failed creating Redis client instance:', err.message);
     return null;
   }
 }
 
-// Attempt to initialize BullMQ with Redis
+// Attempt to initialize BullMQ with Redis safely
 try {
   const queueRedis = buildRedisConnection();
   const workerRedis = buildRedisConnection();
@@ -81,14 +100,15 @@ try {
       })
       .catch((err) => {
         isRedisAvailable = false;
-        console.log(`ℹ️ Redis is offline (${err.message}). Publishing queue running in direct async executor mode.`);
+        console.log(`ℹ️ Redis not available (${err.message}). Publishing queue running in direct async executor mode.`);
       });
   } else {
     isRedisAvailable = false;
+    console.log('ℹ️ Running publishing queue in direct async executor mode.');
   }
 } catch (err) {
   isRedisAvailable = false;
-  console.log(`ℹ️ Redis connection error (${err.message}). Publishing queue running in direct async executor mode.`);
+  console.log(`ℹ️ Publishing queue running in direct async executor mode.`);
 }
 
 /**

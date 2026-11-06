@@ -14,20 +14,36 @@ const app = express();
 // Trust reverse proxy (essential for Render / Cloudflare / Vercel proxy headers)
 app.set('trust proxy', 1);
 
-// Security Headers
-app.use(helmet());
-
-// CORS Configuration
-const allowedOrigin = process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.includes(',')
-  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : (process.env.CORS_ORIGIN || '*');
-
-app.use(cors({
-  origin: allowedOrigin,
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-bot-api-key'],
-  credentials: true
+// Security Headers (relaxed cross-origin-resource-policy so admin can view images)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
+
+// Robust Dynamic CORS Configuration
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. mobile apps, curl, bot)
+    if (!origin) return callback(null, true);
+
+    const configured = process.env.CORS_ORIGIN;
+    if (configured && configured !== '*') {
+      const allowedList = configured.split(',').map(s => s.trim().toLowerCase());
+      const lowerOrigin = origin.toLowerCase();
+      if (allowedList.includes(lowerOrigin) || lowerOrigin.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+    }
+
+    // Default: reflect the requesting origin to satisfy browser credentials: true policy
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-bot-api-key', 'Accept']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Body parsing with limits
 app.use(express.json({ limit: '2mb' }));
