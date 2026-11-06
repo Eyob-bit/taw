@@ -28,5 +28,16 @@ export const config = {
   storage: {
     driver: process.env.STORAGE_DRIVER || 'local',
     localDir: process.env.STORAGE_LOCAL_DIR || './storage/attachments'
-  }
+  },
+
+  cloudinary: {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+    apiKey: process.env.CLOUDINARY_API_KEY || '',
+    apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+    url: process.env.CLOUDINARY_URL || '',
+    folder: process.env.CLOUDINARY_FOLDER || 'taw_submissions'
+  },
+
+  corsOrigin: process.env.CORS_ORIGIN || '*',
+  embeddedBot: process.env.RUN_EMBEDDED_BOT === 'true' || process.env.RUN_BOT_IN_API === 'true'
 };

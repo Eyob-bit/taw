@@ -161,4 +161,11 @@ export async function updateSettings(data) {
   return res.data.data;
 }
 
+export function getAttachmentImageUrl(attachmentId, token) {
+  const base = import.meta.env.VITE_API_BASE_URL || '/api';
+  const cleanBase = base.replace(/\/+$/, '');
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${cleanBase}/admin/attachments/${attachmentId}/image${tokenQuery}`;
+}
+
 export default api;

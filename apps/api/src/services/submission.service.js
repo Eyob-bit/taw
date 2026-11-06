@@ -2,6 +2,8 @@ import prisma from './prisma.js';
 import { toBigInt } from '../utils/bigint.js';
 import { evaluateEligibility, SubmissionStatus, CategoryCode } from '@taw/shared';
 import { enqueuePublishJob } from '../jobs/publisher.queue.js';
+import { uploadFromTelegram, isCloudinaryConfigured } from './cloudinary.service.js';
+import { config } from '../config/index.js';
 
 export async function createSubmission({
   telegramId,
@@ -53,7 +55,34 @@ export async function createSubmission({
     ? SubmissionStatus.READY_TO_PUBLISH
     : SubmissionStatus.PENDING_REVIEW;
 
-  // 4. Create Submission record (with attachment if photo provided)
+  // 4. Process photo attachments (upload to Cloudinary if configured, preserving high quality)
+  const attachmentRecords = await Promise.all(
+    uniquePhotoFileIds.map(async (fileId) => {
+      let finalKey = fileId;
+      if (isCloudinaryConfigured() && config.bot.token) {
+        try {
+          const cloudinaryUrl = await uploadFromTelegram({
+            botToken: config.bot.token,
+            fileId
+          });
+          if (cloudinaryUrl) {
+            finalKey = cloudinaryUrl;
+          }
+        } catch (uploadErr) {
+          console.warn('[Submission] Cloudinary upload failed, falling back to Telegram file ID:', uploadErr.message);
+        }
+      }
+      return {
+        fileKey: finalKey,
+        mimeType: 'image/jpeg',
+        fileSize: 0,
+        status: 'ACCEPTED',
+        isApprovedForPublic: true
+      };
+    })
+  );
+
+  // 5. Create Submission record (with attachment if photo provided)
   const submission = await prisma.submission.create({
     data: {
       userId: user.id,
@@ -67,14 +96,8 @@ export async function createSubmission({
       detectedPii: analysis.piiDetections,
       sensitiveKeywords: analysis.sensitiveAllegations,
       userConfirmedAt: new Date(),
-      attachments: uniquePhotoFileIds.length > 0 ? {
-        create: uniquePhotoFileIds.map((fileKey) => ({
-          fileKey,
-          mimeType: 'image/jpeg',
-          fileSize: 0,
-          status: 'ACCEPTED',
-          isApprovedForPublic: true
-        }))
+      attachments: attachmentRecords.length > 0 ? {
+        create: attachmentRecords
       } : undefined
     },
     include: {

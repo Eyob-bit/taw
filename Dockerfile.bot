@@ -32,3 +32,4 @@ ENV NODE_ENV=production
 COPY --from=builder /app /app
 
 CMD ["npm", "--workspace=@taw/bot", "start"]
+

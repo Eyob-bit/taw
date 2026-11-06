@@ -1,23 +1,22 @@
 services:
-  # 1. Backend REST API
+  # 1. Backend REST API (Render Web Service)
   - type: web
     name: taw-api
     runtime: docker
     dockerfilePath: Dockerfile.api
     plan: starter
     region: frankfurt
+    preDeployCommand: npx prisma migrate deploy --schema=./apps/api/prisma/schema.prisma
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 4000
       - key: DATABASE_URL
-        fromDatabase:
-          name: taw-postgres
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: taw-redis
-          property: connectionString
+        sync: false
+      - key: DIRECT_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
@@ -25,45 +24,28 @@ services:
       - key: BOT_API_KEY
         generateValue: true
       - key: CORS_ORIGIN
-        value: "*"
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
       - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
         sync: false
       - key: TELEGRAM_CHANNEL_ID
         sync: false
       - key: TELEGRAM_DISCUSSION_GROUP_ID
         sync: false
-
-  # 2. Telegram Bot Background Worker
-  - type: worker
-    name: taw-bot
-    runtime: docker
-    dockerfilePath: Dockerfile.bot
-    plan: starter
-    region: frankfurt
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: taw-postgres
-          property: connectionString
-      - key: API_BASE_URL
-        value: https://taw-api.onrender.com/api
-      - key: BOT_API_KEY
-        fromService:
-          type: web
-          name: taw-api
-          envVarKey: BOT_API_KEY
-      - key: TELEGRAM_BOT_TOKEN
+      - key: RUN_EMBEDDED_BOT
+        value: "true"
+      - key: INITIAL_ADMIN_EMAIL
         sync: false
-      - key: TELEGRAM_CHANNEL_ID
+      - key: INITIAL_ADMIN_PASSWORD
         sync: false
-      - key: TELEGRAM_DISCUSSION_GROUP_ID
-        sync: false
-
-databases:
-  - name: taw-postgres
-    plan: starter
-    region: frankfurt
-    databaseName: relationship_platform
-    user: postgres
+      - key: INITIAL_ADMIN_NAME
+        value: "Platform Super Admin"

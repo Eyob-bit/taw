@@ -168,7 +168,7 @@ export default function ModerationPage() {
                       {currentItem.attachments.map((att) => (
                         <div key={att.id} className="relative rounded-lg overflow-hidden border border-blue-200 dark:border-blue-800 bg-slate-100 dark:bg-slate-800">
                           <img
-                            src={`/api/admin/attachments/${att.id}/image${token ? `?token=${encodeURIComponent(token)}` : ''}`}
+                            src={api.getAttachmentImageUrl(att.id, token)}
                             alt="Submission attachment"
                             className="h-48 w-auto max-w-[280px] object-contain"
                             onError={(e) => {

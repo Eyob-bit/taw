@@ -1,143 +1,185 @@
-# Production Deployment Guide: Taw Relationship Platform
+# Production Deployment Guide: Taw Platform
 
-This guide walks you through deploying the complete Ethiopian Relationship Awareness platform:
-- **Admin Dashboard Frontend** on **Vercel**
-- **REST API + Telegram Bot + PostgreSQL + Redis** on **Railway** (or **Render**)
+This guide walks you through deploying the complete Ethiopian Relationship Awareness & Safety Community platform using:
+- **Neon**: Serverless PostgreSQL database with connection pooling
+- **Render**: Node.js backend API & persistent Telegram bot
+- **Vercel**: React admin dashboard frontend
+- **Cloudinary**: Cloud storage & CDN for user-submitted photos and evidence
 
 ---
 
-## Architecture in Production
+## Production Architecture
 
 ```
-┌─────────────────────────────────┐
-│     Vercel (React Frontend)     │
-│   https://taw-admin.vercel.app  │
-└────────────────┬────────────────┘
-                 │ (HTTPS REST API / JWT)
-                 ▼
-┌────────────────────────────────────────────────────────┐
-│             Railway / Render Backend Cloud             │
-│                                                        │
-│  ┌────────────────────────┐  ┌───────────────────────┐ │
-│  │    Taw REST API        │  │     Telegram Bot      │ │
-│  │ (Dockerfile.api)       │  │ (Dockerfile.bot)      │ │
-│  └───────────┬────────────┘  └───────────┬───────────┘ │
-│              │                           │             │
-│              ▼                           ▼             │
-│   ┌─────────────────────┐     ┌─────────────────────┐  │
-│   │  PostgreSQL (Prisma)│     │ Redis 7 (BullMQ)    │  │
-│   └─────────────────────┘     └─────────────────────┘  │
-└────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│           Vercel Frontend            │
+│     https://taw-admin.vercel.app     │
+│       (React 18 + Vite 6 SPA)        │
+└──────────────────┬───────────────────┘
+                   │ HTTPS API Requests (JWT Auth)
+                   ▼
+┌──────────────────────────────────────┐     ┌────────────────────────┐
+│         Render Web Service           │◄────┤  Telegram Bot / Users  │
+│        (Node 22 REST API)            │     │  (Long Polling/Worker) │
+│       https://taw-api.onrender.com   │     └───────────┬────────────┘
+└───┬──────────────┬───────────────┬───┘                 │
+    │              │               │                     │
+    ▼              ▼               ▼                     ▼
+┌─────────┐  ┌───────────┐  ┌──────────────┐      ┌──────────────┐
+│  Neon   │  │   Redis   │  │  Cloudinary  │      │   Telegram   │
+│ Postgres│  │  (BullMQ) │  │ Image CDN &  │◄─────┤ Channel Post │
+│ Pooling │  │  (Optional│  │ Evidence     │      │  (Broadcast) │
+└─────────┘  └───────────┘  └──────────────┘      └──────────────┘
 ```
 
 ---
 
-## Part 1: Deploy Backend, Database, Redis & Bot on Railway
+## Part 1: Provision Neon PostgreSQL Database
 
-Railway is the fastest and most seamless platform for deploying monorepos with PostgreSQL, Redis, and background workers.
-
-### Step 1: Create a Project & Add Databases
-1. Go to [railway.app](https://railway.app) and sign in with GitHub.
-2. Click **New Project** → **Provision PostgreSQL**.
-3. In the same project canvas, click **+ Create** → **Database** → **Add Redis**.
-
-### Step 2: Deploy the API Service
-1. In the same Railway project canvas, click **+ Create** → **GitHub Repo** → Select `Eyob-bit/taw`.
-2. Click the newly created service card and go to **Settings**:
-   - Rename service to: `taw-api`.
-   - Under **Build**:
-     - **Build Type**: `Dockerfile`
-     - **Dockerfile Path**: `Dockerfile.api`
-   - Under **Networking**:
-     - Click **Generate Domain** (e.g. `taw-api.up.railway.app`).
-     - Set Target Port to `4000`.
-3. Go to **Variables** on `taw-api` and add:
-   - `NODE_ENV`: `production`
-   - `PORT`: `4000`
-   - `DATABASE_URL`: `${{Postgres.DATABASE_URL}}` *(Railway variable reference)*
-   - `REDIS_URL`: `${{Redis.REDIS_URL}}` *(Railway variable reference)*
-   - `JWT_SECRET`: *(Generate a secure 32+ character string)*
-   - `JWT_EXPIRES_IN`: `7d`
-   - `BOT_API_KEY`: *(Generate a secret string, e.g. `taw_bot_secret_xyz123`)*
-   - `CORS_ORIGIN`: `*` *(or your Vercel URL once deployed)*
-   - `TELEGRAM_BOT_TOKEN`: `your_bot_token_from_botfather`
-   - `TELEGRAM_CHANNEL_ID`: `@your_public_channel` *(or numerical ID e.g. `-100xxxxxxx`)*
-   - `TELEGRAM_DISCUSSION_GROUP_ID`: `-100xxxxxxx`
-   - `INITIAL_ADMIN_EMAIL`: `admin@ethiopia-awareness.org`
-   - `INITIAL_ADMIN_PASSWORD`: `AdminPassword123!`
-   - `INITIAL_ADMIN_NAME`: `Platform Super Admin`
-
-> **Note**: On first startup, `Dockerfile.api` automatically runs `prisma migrate deploy` and `prisma/seed.js` to create all tables, categories, and your initial Super Admin.
-
-### Step 3: Deploy the Telegram Bot Worker
-1. In the Railway project canvas, click **+ Create** → **GitHub Repo** → Select `Eyob-bit/taw`.
-2. Click the service card and go to **Settings**:
-   - Rename service to: `taw-bot`.
-   - Under **Build**:
-     - **Build Type**: `Dockerfile`
-     - **Dockerfile Path**: `Dockerfile.bot`
-3. Go to **Variables** on `taw-bot` and add:
-   - `NODE_ENV`: `production`
-   - `DATABASE_URL`: `${{Postgres.DATABASE_URL}}`
-   - `API_BASE_URL`: `https://${{taw-api.RAILWAY_PUBLIC_DOMAIN}}/api` *(or your API public domain)*
-   - `BOT_API_KEY`: `${{taw-api.BOT_API_KEY}}`
-   - `TELEGRAM_BOT_TOKEN`: `your_bot_token_from_botfather`
-   - `TELEGRAM_CHANNEL_ID`: `@your_public_channel`
-   - `TELEGRAM_DISCUSSION_GROUP_ID`: `-100xxxxxxx`
+1. Go to [neon.tech](https://neon.tech) and create or log in to your account.
+2. Click **Create Project**:
+   - **Project Name**: `taw-production`
+   - **Postgres Version**: 16 (or 17)
+   - **Region**: Frankfurt (`eu-central-1`) or Oregon/Ohio (choose closest to Render's region).
+3. Once the database is created, Neon displays your Connection Details:
+   - **Pooled connection string** (check "Connection pooling" checkbox):
+     ```
+     postgresql://neondb_owner:PASSWORD@ep-xxxx-pooler.region.aws.neon.tech/neondb?sslmode=require
+     ```
+     *(This is your `DATABASE_URL`)*
+   - **Direct connection string** (uncheck "Connection pooling"):
+     ```
+     postgresql://neondb_owner:PASSWORD@ep-xxxx.region.aws.neon.tech/neondb?sslmode=require
+     ```
+     *(This is your `DIRECT_URL` used for running Prisma migrations)*
 
 ---
 
-## Part 2: Deploy the Admin Dashboard on Vercel
+## Part 2: Set Up Cloudinary for Photo Storage
 
-### Step 1: Import Project into Vercel
-1. Go to [vercel.com/new](https://vercel.com/new) and log in with your GitHub account.
-2. Select your repository: `Eyob-bit/taw`.
-
-### Step 2: Configure Project Settings
-- **Framework Preset**: `Vite`
-- **Root Directory**: Leave as `./` (or select `apps/admin`). The repository includes both root `vercel.json` and `apps/admin/vercel.json` configured for SPA routing.
-- **Build Command**: `npm --workspace=@taw/admin run build`
-- **Output Directory**: `apps/admin/dist`
-
-### Step 3: Add Environment Variables
-In the **Environment Variables** section on Vercel, add:
-- `VITE_API_BASE_URL`: `https://<YOUR-RAILWAY-API-DOMAIN>/api` (e.g. `https://taw-api.up.railway.app/api`)
-- `VITE_TELEGRAM_CHANNEL_URL`: `https://t.me/<your_channel>`
-
-### Step 4: Click Deploy
-Vercel will build the frontend and assign a live production URL (e.g. `https://taw-admin.vercel.app`).
+1. Go to [cloudinary.com](https://cloudinary.com) and create a free account.
+2. In the Cloudinary Dashboard (Console), locate your **Product Environment Credentials**:
+   - **Cloud Name**: e.g. `dxyza123`
+   - **API Key**: e.g. `123456789012345`
+   - **API Secret**: e.g. `abcdefghijklmnopqrstuvwxyz`
+   - Or the single **API Environment variable**:
+     ```
+     CLOUDINARY_URL=cloudinary://<API_KEY>:<API_SECRET>@<CLOUD_NAME>
+     ```
 
 ---
 
-## Part 3: Alternative Backend Deployment via Render (Blueprint)
+## Part 3: Deploy Backend on Render
 
-If you prefer Render instead of Railway:
+You can deploy the backend using either **Option A (Render Blueprint - Easiest)** or **Option B (Manual Web Service)**.
+
+### Option A: Render Blueprint (`render.yaml`)
 1. Log in to [render.com](https://render.com).
 2. Go to **Blueprints** → **New Blueprint Instance**.
-3. Connect your repository `Eyob-bit/taw`.
-4. Render will automatically detect `render.yaml` and provision:
-   - PostgreSQL (`taw-postgres`)
-   - Redis (`taw-redis`)
-   - Web Service (`taw-api`)
-   - Worker (`taw-bot`)
-5. Fill in the non-synced Telegram credentials (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`, `TELEGRAM_DISCUSSION_GROUP_ID`).
-6. Click **Apply**.
+3. Select your GitHub repository: `https://github.com/Eyob-bit/taw.git`.
+4. Render will read `render.yaml` and prompt for the required environment variables.
+5. Click **Apply**.
+
+### Option B: Manual Web Service
+1. On Render, click **New +** → **Web Service**.
+2. Connect your repository: `Eyob-bit/taw`.
+3. Configure settings:
+   - **Name**: `taw-api`
+   - **Region**: Frankfurt (recommended)
+   - **Branch**: `main`
+   - **Runtime**: `Docker`
+   - **Dockerfile Path**: `Dockerfile.api`
+   - **Plan**: Starter ($7/mo recommended for 24/7 uptime without sleep)
+4. Under **Advanced Settings**:
+   - **Pre-Deploy Command**:
+     ```bash
+     npx prisma migrate deploy --schema=./apps/api/prisma/schema.prisma && node apps/api/prisma/seed.js
+     ```
+     *(This runs migrations and seeds the super admin once per deployment without slowing container boot or risking race conditions).*
+   - **Health Check Path**: `/health`
+
+5. Add Environment Variables:
+   | Variable | Value / Notes |
+   | :--- | :--- |
+   | `NODE_ENV` | `production` |
+   | `PORT` | `4000` |
+   | `DATABASE_URL` | Your Neon **Pooled** connection string |
+   | `DIRECT_URL` | Your Neon **Direct** connection string |
+   | `JWT_SECRET` | Secure random string (32+ chars) |
+   | `JWT_EXPIRES_IN` | `7d` |
+   | `BOT_API_KEY` | Strong random token for bot API access |
+   | `CORS_ORIGIN` | `https://taw-admin.vercel.app` (or `*`) |
+   | `CLOUDINARY_URL` | `cloudinary://API_KEY:API_SECRET@CLOUD_NAME` |
+   | `TELEGRAM_BOT_TOKEN` | Token from @BotFather |
+   | `TELEGRAM_BOT_USERNAME` | Your bot username (e.g. `tawkiwalesh_bot`) |
+   | `TELEGRAM_CHANNEL_ID` | Your channel ID (e.g. `-1003900110535` or `@your_channel`) |
+   | `TELEGRAM_DISCUSSION_GROUP_ID` | Group ID (e.g. `-100xxxxxxx`) |
+   | `RUN_EMBEDDED_BOT` | `true` *(Runs the Telegram bot alongside the API in the same service to save cost)* |
+   | `INITIAL_ADMIN_EMAIL` | `admin@ethiopia-awareness.org` |
+   | `INITIAL_ADMIN_PASSWORD` | Strong password for initial admin login |
+   | `INITIAL_ADMIN_NAME` | `Platform Super Admin` |
+   | `REDIS_URL` | Optional (if using Upstash or Render Redis; falls back to in-memory async executor if left empty) |
+
+6. Click **Create Web Service**.
+7. Once deployed, copy your Render URL (e.g., `https://taw-api.onrender.com`).
 
 ---
 
-## Part 4: Post-Deployment Verification Checklist
+## Part 4: Deploy Admin Dashboard on Vercel
 
-1. **Verify Backend Health**:
-   Visit `https://<your-api-domain>/health` in your browser. It should return:
+1. Go to [vercel.com/new](https://vercel.com/new) and log in with GitHub.
+2. Import repository **`Eyob-bit/taw`**.
+3. Configure Project Settings:
+   - **Framework Preset**: `Vite`
+   - **Root Directory**: Leave as `./` (or select `apps/admin`). The project includes both root and app `vercel.json` rewrite files for SPA routing.
+   - **Build Command**: `npm --workspace=@taw/admin run build`
+   - **Output Directory**: `apps/admin/dist`
+4. Add Environment Variables:
+   | Variable | Value |
+   | :--- | :--- |
+   | `VITE_API_BASE_URL` | `https://taw-api.onrender.com/api` *(Your Render backend URL + `/api`)* |
+   | `VITE_TELEGRAM_CHANNEL_URL` | `https://t.me/your_channel` |
+5. Click **Deploy**.
+6. Vercel will build and assign your production URL (e.g., `https://taw-admin.vercel.app`).
+7. Update `CORS_ORIGIN` in Render to match your exact Vercel URL.
+
+---
+
+## Part 5: Bot Operation: Embedded vs. Separate Worker
+
+You have two options for running the Telegram Bot on Render:
+
+| Mode | Configuration | Pros & Cons |
+| :--- | :--- | :--- |
+| **Embedded (Recommended)** | Set `RUN_EMBEDDED_BOT=true` on the `taw-api` service | Runs API + Bot in one single Render Starter service ($7/mo total). Ideal for low-to-medium traffic. |
+| **Dedicated Worker** | Set `RUN_EMBEDDED_BOT=false` on `taw-api` and create a separate Render **Background Worker** using `Dockerfile.bot` | Full CPU/memory isolation for high traffic. Costs an additional Render service ($7/mo extra). |
+
+---
+
+## Part 6: Production Verification Checklist
+
+1. **API Health Check**:
+   Visit `https://<YOUR-RENDER-API>/health` in your browser. Expected response:
    ```json
-   { "status": "healthy", "service": "Ethiopian Relationship Awareness API" }
+   {
+     "status": "healthy",
+     "timestamp": "2026-11-07T...",
+     "service": "Ethiopian Relationship Awareness API"
+   }
    ```
-2. **Log into Admin Dashboard**:
-   - Open your Vercel URL: `https://<your-vercel-app>.vercel.app/login`
-   - Login with `admin@ethiopia-awareness.org` and your configured `INITIAL_ADMIN_PASSWORD`.
-   - Confirm you can see the Overview Dashboard, Categories, and Moderation queue.
-3. **Test Telegram Bot**:
-   - Open Telegram and search for your bot.
-   - Send `/start`. Select Amharic or English.
-   - Select a category, accept guidelines, and submit a test text.
-   - Verify it appears in the Admin Dashboard Moderation or Publications queue.
+
+2. **Admin Dashboard Login**:
+   - Open your Vercel URL: `https://<YOUR-VERCEL-APP>.vercel.app/login`
+   - Sign in with `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD`.
+   - Verify Overview statistics and Moderation page load without CORS errors.
+
+3. **Telegram Bot Submissions & Cloudinary**:
+   - Open your bot in Telegram and send `/start`.
+   - Select a language and category, accept guidelines.
+   - Attach a test photo with description and confirm submission.
+   - In Cloudinary Media Library, verify the photo uploaded into folder `taw_submissions` at full quality.
+   - In the React Admin Dashboard (`/moderation`), verify the photo renders properly.
+
+4. **Telegram Channel Publishing**:
+   - Approve a submission in the Admin Dashboard.
+   - Verify it publishes cleanly with bilingual formatting and hashtags to your designated Telegram Channel.

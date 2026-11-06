@@ -9,7 +9,7 @@ COPY apps/api/package*.json ./apps/api/
 COPY apps/bot/package*.json ./apps/bot/
 COPY apps/admin/package*.json ./apps/admin/
 
-# Install dependencies
+# Install all dependencies
 RUN npm ci
 
 # Copy application source
@@ -34,4 +34,5 @@ COPY --from=builder /app /app
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "npm --workspace=@taw/api run prisma:deploy && npm --workspace=@taw/api run prisma:seed && npm --workspace=@taw/api start"]
+# Start server directly. Run "npx prisma migrate deploy" as Render Pre-Deploy command to prevent startup race conditions.
+CMD ["npm", "--workspace=@taw/api", "start"]

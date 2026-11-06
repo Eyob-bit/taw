@@ -5,6 +5,7 @@ import { config } from '../config/index.js';
 import * as submissionService from '../services/submission.service.js';
 import * as moderationService from '../services/moderation.service.js';
 import { adminApproveSubmissionSchema, adminRejectSubmissionSchema, adminUpdateSubmissionSchema } from '../validators/index.js';
+import { uploadBuffer, isCloudinaryConfigured } from '../services/cloudinary.service.js';
 
 export async function listSubmissions(req, res, next) {
   try {
@@ -103,7 +104,12 @@ export async function getAttachmentImage(req, res, next) {
 
     const fileKey = attachment.fileKey;
 
-    // Check if file exists locally in cache
+    // 1. If fileKey is already a Cloudinary / HTTP(S) URL, redirect directly
+    if (fileKey.startsWith('http://') || fileKey.startsWith('https://')) {
+      return res.redirect(fileKey);
+    }
+
+    // 2. Check if file exists locally in cache
     const storageDir = path.resolve(config.storage.localDir || './storage/attachments');
     const localFilePath = path.join(storageDir, `${attachment.id}.jpg`);
 
@@ -112,7 +118,7 @@ export async function getAttachmentImage(req, res, next) {
       return res.sendFile(localFilePath);
     }
 
-    // Fetch from Telegram Bot API using fileKey (file_id)
+    // 3. Fetch from Telegram Bot API using fileKey (file_id)
     const botToken = config.bot.token;
     if (!botToken || botToken.includes('SAMPLE_TOKEN')) {
       return res.status(404).json({ success: false, error: 'Telegram bot not configured to fetch image' });
@@ -134,7 +140,25 @@ export async function getAttachmentImage(req, res, next) {
 
     const buffer = Buffer.from(await imgRes.arrayBuffer());
 
-    // Save to local cache asynchronously
+    // 4. If Cloudinary is configured, upload on-the-fly, update database record, and redirect
+    if (isCloudinaryConfigured()) {
+      try {
+        const uploadResult = await uploadBuffer(buffer, {
+          public_id: `attachment_${attachment.id}`
+        });
+        if (uploadResult?.secure_url) {
+          await prisma.attachment.update({
+            where: { id: attachment.id },
+            data: { fileKey: uploadResult.secure_url }
+          });
+          return res.redirect(uploadResult.secure_url);
+        }
+      } catch (cloudErr) {
+        console.warn('[Admin] Cloudinary upload on-the-fly failed:', cloudErr.message);
+      }
+    }
+
+    // 5. Save to local cache asynchronously
     try {
       if (!fs.existsSync(storageDir)) {
         fs.mkdirSync(storageDir, { recursive: true });

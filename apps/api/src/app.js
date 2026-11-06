@@ -11,14 +11,22 @@ import { generalLimiter } from './middleware/rateLimit.middleware.js';
 
 const app = express();
 
+// Trust reverse proxy (essential for Render / Cloudflare / Vercel proxy headers)
+app.set('trust proxy', 1);
+
 // Security Headers
 app.use(helmet());
 
 // CORS Configuration
+const allowedOrigin = process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.includes(',')
+  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+  : (process.env.CORS_ORIGIN || '*');
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: allowedOrigin,
   methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-bot-api-key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-bot-api-key'],
+  credentials: true
 }));
 
 // Body parsing with limits

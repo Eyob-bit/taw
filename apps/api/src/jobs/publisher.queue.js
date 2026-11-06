@@ -1,4 +1,5 @@
 import { Queue, Worker } from 'bullmq';
+import Redis from 'ioredis';
 import { executePublishingPipeline } from './publishing.pipeline.js';
 import { config } from '../config/index.js';
 
@@ -8,62 +9,86 @@ let publishQueue = null;
 let publishWorker = null;
 let isRedisAvailable = false;
 
+function buildRedisConnection() {
+  try {
+    if (config.redis.url && config.redis.url !== 'redis://localhost:6379') {
+      const isTls = config.redis.url.startsWith('rediss://');
+      return new Redis(config.redis.url, {
+        maxRetriesPerRequest: null,
+        connectTimeout: 5000,
+        lazyConnect: true,
+        retryStrategy: (times) => (times > 3 ? null : Math.min(times * 1000, 3000)),
+        ...(isTls ? { tls: { rejectUnauthorized: false } } : {})
+      });
+    }
+
+    return new Redis({
+      host: config.redis.host,
+      port: config.redis.port,
+      maxRetriesPerRequest: null,
+      connectTimeout: 2000,
+      lazyConnect: true,
+      retryStrategy: (times) => (times > 3 ? null : Math.min(times * 1000, 3000))
+    });
+  } catch (err) {
+    console.warn('[Queue] Failed creating Redis client instance:', err.message);
+    return null;
+  }
+}
+
 // Attempt to initialize BullMQ with Redis
 try {
-  const redisOptions = {
-    host: config.redis.host,
-    port: config.redis.port,
-    maxRetriesPerRequest: null,
-    connectTimeout: 2000,
-    lazyConnect: true
-  };
+  const queueRedis = buildRedisConnection();
+  const workerRedis = buildRedisConnection();
 
-  publishQueue = new Queue(QUEUE_NAME, {
-    connection: redisOptions,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: {
-        type: 'exponential',
-        delay: 3000
-      },
-      removeOnComplete: 100,
-      removeOnFail: 200
-    }
-  });
+  if (queueRedis && workerRedis) {
+    queueRedis.connect()
+      .then(async () => {
+        await queueRedis.ping();
+        isRedisAvailable = true;
+        console.log('📦 BullMQ Publishing Queue initialized with Redis');
 
-  // Test Redis connection
-  publishQueue.client.then(async (client) => {
-    try {
-      await client.ping();
-      isRedisAvailable = true;
-      console.log('📦 BullMQ Publishing Queue initialized with Redis');
+        publishQueue = new Queue(QUEUE_NAME, {
+          connection: queueRedis,
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 3000
+            },
+            removeOnComplete: 100,
+            removeOnFail: 200
+          }
+        });
 
-      // Initialize Worker
-      publishWorker = new Worker(
-        QUEUE_NAME,
-        async (job) => {
-          console.log(`[BullMQ Worker] Processing publish job ${job.id} for submission ${job.data.submissionId}`);
-          return executePublishingPipeline(job.data.submissionId);
-        },
-        { connection: redisOptions, concurrency: 2 }
-      );
+        await workerRedis.connect();
+        publishWorker = new Worker(
+          QUEUE_NAME,
+          async (job) => {
+            console.log(`[BullMQ Worker] Processing publish job ${job.id} for submission ${job.data.submissionId}`);
+            return executePublishingPipeline(job.data.submissionId);
+          },
+          { connection: workerRedis, concurrency: 2 }
+        );
 
-      publishWorker.on('completed', (job) => {
-        console.log(`[BullMQ Worker] Job ${job.id} completed successfully`);
+        publishWorker.on('completed', (job) => {
+          console.log(`[BullMQ Worker] Job ${job.id} completed successfully`);
+        });
+
+        publishWorker.on('failed', (job, err) => {
+          console.error(`[BullMQ Worker] Job ${job?.id} failed:`, err.message);
+        });
+      })
+      .catch((err) => {
+        isRedisAvailable = false;
+        console.log(`ℹ️ Redis is offline (${err.message}). Publishing queue running in direct async executor mode.`);
       });
-
-      publishWorker.on('failed', (job, err) => {
-        console.error(`[BullMQ Worker] Job ${job?.id} failed:`, err.message);
-      });
-    } catch {
-      isRedisAvailable = false;
-      console.log('ℹ️ Redis is offline. Publishing queue running in direct async executor mode.');
-    }
-  }).catch(() => {
+  } else {
     isRedisAvailable = false;
-  });
-} catch {
+  }
+} catch (err) {
   isRedisAvailable = false;
+  console.log(`ℹ️ Redis connection error (${err.message}). Publishing queue running in direct async executor mode.`);
 }
 
 /**
@@ -102,3 +127,7 @@ export async function enqueuePublishJob(submissionId, { delay = 0 } = {}) {
 
   return { success: true, mode: 'direct_async' };
 }
+
+export default {
+  enqueuePublishJob
+};
