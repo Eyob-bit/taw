@@ -1,7 +1,23 @@
 import axios from 'axios';
 
+export function getApiBaseUrl() {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('taw_api_base_url');
+    if (saved) return saved;
+  }
+  return import.meta.env.VITE_API_BASE_URL || '/api';
+}
+
+export function setApiBaseUrl(url) {
+  if (typeof window !== 'undefined') {
+    const cleanUrl = url.trim().replace(/\/+$/, '');
+    localStorage.setItem('taw_api_base_url', cleanUrl);
+    api.defaults.baseURL = cleanUrl;
+  }
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: getApiBaseUrl(),
   headers: {
     'Content-Type': 'application/json'
   }
@@ -162,7 +178,7 @@ export async function updateSettings(data) {
 }
 
 export function getAttachmentImageUrl(attachmentId, token) {
-  const base = import.meta.env.VITE_API_BASE_URL || '/api';
+  const base = getApiBaseUrl();
   const cleanBase = base.replace(/\/+$/, '');
   const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
   return `${cleanBase}/admin/attachments/${attachmentId}/image${tokenQuery}`;
