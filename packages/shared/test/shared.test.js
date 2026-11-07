@@ -43,7 +43,7 @@ describe('Shared Package Tests', () => {
       publicContent: 'Has anyone seen this person around Piassa?'
     });
     assert.ok(post.startsWith('Has anyone seen this person around Piassa?'));
-    assert.ok(post.includes('ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል አግኙን::'));
+    assert.ok(post.includes('ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል ላኪልን::'));
     assert.ok(post.includes('❗️❗️እንጠንቀቅ'));
   });
 });
