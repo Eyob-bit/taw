@@ -17,14 +17,24 @@ const server = app.listen(config.port, async () => {
         const { createBot } = await import('../../bot/src/index.js');
         botInstance = createBot(config.bot.token);
         botInstance.launch(
-          () => console.log('🤖 Embedded Telegram Bot started successfully and listening for messages')
-        ).catch((err) => console.error('Failed to launch embedded bot:', err.message));
+          () => {
+            console.log('🤖 Embedded Telegram Bot started successfully and listening for messages');
+            global.__BOT_STATUS__ = { started: true, error: null, timestamp: new Date().toISOString() };
+          }
+        ).catch((err) => {
+          console.error('Failed to launch embedded bot:', err.message);
+          global.__BOT_STATUS__ = { started: false, error: `Launch failed: ${err.message}`, timestamp: new Date().toISOString() };
+        });
       } catch (err) {
         console.error('Failed to load embedded Telegram bot:', err.message);
+        global.__BOT_STATUS__ = { started: false, error: `Import failed: ${err.message}`, timestamp: new Date().toISOString() };
       }
     } else {
       console.log('ℹ️ RUN_EMBEDDED_BOT is enabled, but TELEGRAM_BOT_TOKEN is not configured or is a placeholder.');
+      global.__BOT_STATUS__ = { started: false, error: 'Token missing or placeholder', timestamp: new Date().toISOString() };
     }
+  } else {
+    global.__BOT_STATUS__ = { started: false, error: 'RUN_EMBEDDED_BOT is not true', timestamp: new Date().toISOString() };
   }
 });
 

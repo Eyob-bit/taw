@@ -62,7 +62,13 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    service: 'Ethiopian Relationship Awareness API'
+    service: 'Ethiopian Relationship Awareness API',
+    version: '1.0.1-bot-embed',
+    bot: global.__BOT_STATUS__ || { started: false, status: 'Not initialized yet' },
+    env: {
+      RUN_EMBEDDED_BOT: process.env.RUN_EMBEDDED_BOT || null,
+      TELEGRAM_BOT_TOKEN_CONFIGURED: !!process.env.TELEGRAM_BOT_TOKEN
+    }
   });
 });
 
