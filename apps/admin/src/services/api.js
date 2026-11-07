@@ -4,6 +4,15 @@ export function getApiBaseUrl() {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('taw_api_base_url');
     if (saved) return saved;
+
+    // If running on Vercel, use configured VITE_API_BASE_URL or default to live Render backend
+    if (window.location.hostname.includes('vercel.app')) {
+      const envUrl = import.meta.env.VITE_API_BASE_URL;
+      if (envUrl && !envUrl.includes('localhost')) {
+        return envUrl;
+      }
+      return 'https://taw-api-y52z.onrender.com/api';
+    }
   }
   return import.meta.env.VITE_API_BASE_URL || '/api';
 }
