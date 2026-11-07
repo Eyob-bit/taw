@@ -15,6 +15,7 @@ RUN npm ci
 # Copy application source
 COPY packages/shared/ ./packages/shared/
 COPY apps/api/ ./apps/api/
+COPY apps/bot/ ./apps/bot/
 
 # Generate Prisma Client
 RUN npm --workspace=@taw/api run prisma:generate

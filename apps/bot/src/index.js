@@ -66,8 +66,8 @@ export function createBot(token = config.botToken) {
   return bot;
 }
 
-// Auto-start in non-test mode if token is configured
-if (process.env.NODE_ENV !== 'test') {
+// Auto-start in non-test mode if running as standalone bot (not embedded inside API service)
+if (process.env.NODE_ENV !== 'test' && process.env.IS_EMBEDDED_BOT !== 'true') {
   if (config.botToken && !config.botToken.includes('SAMPLE_TOKEN')) {
     const bot = createBot();
 
@@ -75,7 +75,6 @@ if (process.env.NODE_ENV !== 'test') {
     // because it awaits the infinite polling loop. Use the onLaunch
     // callback (2nd arg) which fires after getMe() succeeds.
     bot.launch(
-      { dropPendingUpdates: true },
       () => console.log('🤖 Telegram Bot started successfully and listening for messages')
     ).catch((err) => console.error('Failed to launch bot:', err.message));
 

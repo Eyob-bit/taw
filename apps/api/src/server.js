@@ -13,10 +13,10 @@ const server = app.listen(config.port, async () => {
     if (config.bot.token && !config.bot.token.includes('SAMPLE_TOKEN')) {
       try {
         console.log('🤖 Starting embedded Telegram Bot inside API service...');
+        process.env.IS_EMBEDDED_BOT = 'true';
         const { createBot } = await import('../../bot/src/index.js');
         botInstance = createBot(config.bot.token);
         botInstance.launch(
-          { dropPendingUpdates: true },
           () => console.log('🤖 Embedded Telegram Bot started successfully and listening for messages')
         ).catch((err) => console.error('Failed to launch embedded bot:', err.message));
       } catch (err) {
