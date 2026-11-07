@@ -75,55 +75,23 @@ export function detectSensitiveAllegations(text = '') {
 }
 
 /**
- * Replace detected PII with neutral redacted placeholder
+ * Preserve original text without removing names, usernames or handles.
+ * All removal is handled manually by human administrators.
  */
 export function sanitizeText(text = '') {
-  if (!text) return '';
-
-  return text
-    .replace(ETHIOPIAN_PHONE_REGEX, '[የስልክ ቁጥር ተወግዷል / Phone Removed]')
-    .replace(GENERAL_PHONE_REGEX, '[ስልክ ተወግዷል / Phone Removed]')
-    .replace(EMAIL_REGEX, '[ኢሜይል ተወግዷል / Email Removed]')
-    .replace(SOCIAL_HANDLE_REGEX, '[መለያ ተወግዷል / Handle Removed]')
-    .replace(URL_REGEX, '[ሊንክ ተወግዷል / Link Removed]');
+  return text || '';
 }
 
 /**
- * Analyze submission eligibility for auto-publishing vs moderator review
+ * Analyze submission eligibility - all submissions require human moderator review
  */
-export function evaluateEligibility({ text, categoryCode, hasAttachments = false }) {
-  const piiDetections = detectPII(text);
-  const sensitiveAllegations = detectSensitiveAllegations(text);
-  const reasons = [];
-
-  // Rule 1: Relationship Safety category ALWAYS requires human review
-  if (categoryCode === CategoryCode.RELATIONSHIP_SAFETY) {
-    reasons.push('Relationship Safety submissions strictly require human moderator review before publication.');
-  }
-
-  // Rule 2: Submissions with attachments (photos/evidence) in Safety category ALWAYS require human review
-  if (hasAttachments && categoryCode === CategoryCode.RELATIONSHIP_SAFETY) {
-    reasons.push('Safety submissions with attachments require manual review to evaluate submitted evidence.');
-  }
-
-  // Rule 3: Direct contact details or handles require review
-  if (piiDetections.length > 0) {
-    reasons.push(`Contains contact details or identifiers (${piiDetections.map(d => d.type).join(', ')}).`);
-  }
-
-  // Rule 4: Potentially defamatory allegations or severe keywords require review
-  if (sensitiveAllegations.length > 0) {
-    reasons.push(`Contains sensitive claim keywords (${sensitiveAllegations.slice(0, 3).join(', ')}).`);
-  }
-
-  const isEligibleForAutoPublish = reasons.length === 0 && categoryCode === CategoryCode.ARE_WE_DATING;
-
+export function evaluateEligibility({ text = '' } = {}) {
   return {
-    isEligibleForAutoPublish,
-    reasons,
-    piiDetections,
-    sensitiveAllegations,
-    sanitizedContent: sanitizeText(text)
+    isEligibleForAutoPublish: false,
+    reasons: ['All submissions require manual review by administrators before publication.'],
+    piiDetections: [],
+    sensitiveAllegations: [],
+    sanitizedContent: text || ''
   };
 }
 

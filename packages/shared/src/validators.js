@@ -26,22 +26,14 @@ export function validateSubmissionText(text = '', hasPhoto = false) {
   return { isValid: true, errorKey: null, message: null };
 }
 
+export const POST_FOOTER = `ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል አግኙ::\n\n❗️❗️እንጠንቀቅ`;
+
 /**
- * Format a channel publication message with hashtag, body, disclaimer, and privacy note
+ * Format a channel publication message with user text followed by standard community footer
  */
-export function formatPublicationPost({ categoryCode, publicContent, language = SupportedLanguages.AM, publicationNumber }) {
-  const t = getTranslation(language);
-  const hashtag = categoryCode === CategoryCode.ARE_WE_DATING
-    ? Hashtags.ARE_WE_DATING
-    : Hashtags.RELATIONSHIP_SAFETY;
-
-  const disclaimer = categoryCode === CategoryCode.ARE_WE_DATING
-    ? t.publication.disclaimerAreWeDating
-    : t.publication.disclaimerSafety;
-
-  const header = publicationNumber ? `${hashtag} #${publicationNumber}` : hashtag;
-
-  return `${header}\n\n${publicContent.trim()}\n\n---\n${disclaimer}`;
+export function formatPublicationPost({ publicContent }) {
+  const content = (publicContent || '').trim();
+  return `${content}\n\n${POST_FOOTER}`;
 }
 
 /**

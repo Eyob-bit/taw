@@ -44,16 +44,8 @@ export async function createSubmission({
     throw new Error(`Category ${categoryCode} does not exist`);
   }
 
-  // 3. Content Analysis & Privacy/Eligibility evaluation
-  const analysis = evaluateEligibility({
-    text: content,
-    categoryCode,
-    hasAttachments: effectiveHasAttachments
-  });
-
-  const initialStatus = analysis.isEligibleForAutoPublish
-    ? SubmissionStatus.READY_TO_PUBLISH
-    : SubmissionStatus.PENDING_REVIEW;
+  // 3. All submissions strictly require manual admin review before publishing
+  const initialStatus = SubmissionStatus.PENDING_REVIEW;
 
   // 4. Process photo attachments (upload to Cloudinary if configured, preserving high quality)
   const attachmentRecords = await Promise.all(
@@ -88,13 +80,13 @@ export async function createSubmission({
       userId: user.id,
       categoryId: category.id,
       status: initialStatus,
-      originalContent: content, // Stored safely for moderators only
-      publicContent: analysis.sanitizedContent, // Redacted version
+      originalContent: content,
+      publicContent: content, // Preserves exact user text including names and usernames
       language,
-      isEligibleForAutoPublish: analysis.isEligibleForAutoPublish,
-      eligibilityReasons: analysis.reasons,
-      detectedPii: analysis.piiDetections,
-      sensitiveKeywords: analysis.sensitiveAllegations,
+      isEligibleForAutoPublish: false,
+      eligibilityReasons: ['Requires admin review before publication'],
+      detectedPii: [],
+      sensitiveKeywords: [],
       userConfirmedAt: new Date(),
       attachments: attachmentRecords.length > 0 ? {
         create: attachmentRecords
@@ -112,11 +104,6 @@ export async function createSubmission({
       attachments: true
     }
   });
-
-  // 5. If eligible for automatic publication, enqueue publishing job
-  if (analysis.isEligibleForAutoPublish) {
-    await enqueuePublishJob(submission.id, { delay: 1000 });
-  }
 
   return submission;
 }

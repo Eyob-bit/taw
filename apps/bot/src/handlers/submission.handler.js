@@ -70,18 +70,10 @@ async function promptForContent(ctx, categoryCode, lang) {
 }
 
 async function buildAndSendPreview(ctx, { telegramId, session, text, photoFileIds, lang, t }) {
-  const analysis = evaluateEligibility({
-    text,
-    categoryCode: session.draftCategory,
-    hasAttachments: photoFileIds.length > 0
-  });
-
-  const sanitized = sanitizeText(text);
-
   await sessionStore.updateSession(telegramId, {
     state: 'WAITING_FOR_CONFIRMATION',
     draftOriginalContent: text,
-    draftPublicContent: sanitized,
+    draftPublicContent: text,
     metadata: { ...(session.metadata || {}), photoFileIds }
   });
 
@@ -91,13 +83,8 @@ async function buildAndSendPreview(ctx, { telegramId, session, text, photoFileId
 
   let previewMsg = `${t.submission.previewTitle}\n\n` +
     `📂 **${t.submission.categoryLabel}**: ${categoryName}\n\n` +
-    `💬 **${t.submission.contentLabel}**:\n${sanitized}\n\n`;
-
-  if (analysis.piiDetections.length > 0 || analysis.sensitiveAllegations.length > 0) {
-    previewMsg += `${t.submission.piiWarning}\n\n`;
-  }
-
-  previewMsg += t.submission.confirmPrompt;
+    `💬 **${t.submission.contentLabel}**:\n${text}\n\n` +
+    t.submission.confirmPrompt;
 
   if (photoFileIds.length === 1) {
     await ctx.replyWithPhoto(photoFileIds[0], {
@@ -246,10 +233,9 @@ export async function handleTextMessage(ctx) {
   }
 
   // Text only received — store and ask for photo
-  const sanitized = sanitizeText(text);
   await sessionStore.updateSession(telegramId, {
     draftOriginalContent: text,
-    draftPublicContent: sanitized
+    draftPublicContent: text
   });
   await ctx.reply(t.submission.textReceivedNeedPhoto, getCancelKeyboard(lang));
 }
@@ -275,7 +261,7 @@ export async function handleConfirmSubmit(ctx) {
   }
 
   try {
-    const submission = await apiClient.createSubmission({
+    await apiClient.createSubmission({
       telegramId,
       categoryCode: session.draftCategory,
       content: session.draftOriginalContent,
@@ -284,12 +270,7 @@ export async function handleConfirmSubmit(ctx) {
     });
 
     await sessionStore.resetSession(telegramId);
-
-    if (submission.isEligibleForAutoPublish) {
-      await ctx.reply(t.submission.submittedSuccessAuto, getMainMenuKeyboard(lang));
-    } else {
-      await ctx.reply(t.submission.submittedSuccessReview, getMainMenuKeyboard(lang));
-    }
+    await ctx.reply(t.submission.submittedSuccessReview, getMainMenuKeyboard(lang));
   } catch (err) {
     console.error('Error creating submission:', err.message);
     const errorMsg = err.response?.data?.error || err.message;

@@ -59,8 +59,8 @@ describe('Publishing Pipeline & Telegram Channel Integration Tests', () => {
     expect(publication).toBeDefined();
     expect(publication.submissionId).toBe(testSubmission.id);
     expect(publication.status).toBe('ACTIVE');
-    expect(publication.postText).toContain('#are_we_dating_the_same_guy');
-    expect(publication.postText).toContain('⚠️ ይህ ጥያቄ ብቻ ነው');
+    expect(publication.postText).toContain('ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል አግኙ::');
+    expect(publication.postText).toContain('❗️❗️እንጠንቀቅ');
 
     // Verify submission record updated
     const updatedSub = await prisma.submission.findUnique({
@@ -68,7 +68,7 @@ describe('Publishing Pipeline & Telegram Channel Integration Tests', () => {
     });
     expect(updatedSub.status).toBe(SubmissionStatus.PUBLISHED);
     expect(updatedSub.publishedAt).toBeDefined();
-  });
+  }, 15000);
 
   it('prevents duplicate publication when pipeline is called again (idempotent)', async () => {
     const publicationAgain = await executePublishingPipeline(testSubmission.id);

@@ -18,26 +18,19 @@ describe('Shared Package Tests', () => {
     assert.strictEqual(pii[1].type, 'HANDLE');
   });
 
-  it('sanitizes text properly', () => {
-    const text = 'Reach me at 0911234567 or @myhandle';
+  it('preserves text without removing names or handles', () => {
+    const text = 'Reach me at 0911234567 or @myhandle with Natnael';
     const sanitized = sanitizeText(text);
-    assert.ok(!sanitized.includes('0911234567'));
-    assert.ok(!sanitized.includes('@myhandle'));
-    assert.ok(sanitized.includes('[የስልክ ቁጥር ተወግዷል / Phone Removed]'));
+    assert.strictEqual(sanitized, text);
+    assert.ok(sanitized.includes('@myhandle'));
+    assert.ok(sanitized.includes('Natnael'));
   });
 
-  it('routes safety category to moderator review even if clean text', () => {
-    const text = 'This is a clean description of an experience that has more than 30 characters.';
-    const result = evaluateEligibility({ text, categoryCode: CategoryCode.RELATIONSHIP_SAFETY });
-    assert.strictEqual(result.isEligibleForAutoPublish, false);
-    assert.ok(result.reasons.some(r => r.includes('strictly require human moderator review')));
-  });
-
-  it('permits clean ARE_WE_DATING question for auto publish', () => {
+  it('routes all submissions to manual moderator review', () => {
     const text = 'We met in Bole around November. He says he is a 28 year old engineer named Natnael.';
     const result = evaluateEligibility({ text, categoryCode: CategoryCode.ARE_WE_DATING });
-    assert.strictEqual(result.isEligibleForAutoPublish, true);
-    assert.strictEqual(result.reasons.length, 0);
+    assert.strictEqual(result.isEligibleForAutoPublish, false);
+    assert.ok(result.reasons.some(r => r.includes('manual review')));
   });
 
   it('validates text lengths', () => {
@@ -45,15 +38,13 @@ describe('Shared Package Tests', () => {
     assert.strictEqual(validateSubmissionText('This is long enough text for a proper question submission in Ethiopia.').isValid, true);
   });
 
-  it('formats publication post with disclaimers', () => {
+  it('formats publication post with user text and exact footer', () => {
     const post = formatPublicationPost({
-      categoryCode: CategoryCode.ARE_WE_DATING,
-      publicContent: 'Has anyone seen this person around Piassa?',
-      language: 'am',
-      publicationNumber: 101
+      publicContent: 'Has anyone seen this person around Piassa?'
     });
-    assert.ok(post.includes('#are_we_dating_the_same_guy #101'));
-    assert.ok(post.includes('⚠️ ይህ ጥያቄ ብቻ ነው'));
+    assert.ok(post.startsWith('Has anyone seen this person around Piassa?'));
+    assert.ok(post.includes('ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል አግኙን::'));
+    assert.ok(post.includes('❗️❗️እንጠንቀቅ'));
   });
 });
 

@@ -95,7 +95,7 @@ describe('Relationship Awareness API Test Suite', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('automatically marks clean ARE_WE_DATING questions as READY_TO_PUBLISH', async () => {
+    it('marks all submissions as PENDING_REVIEW for manual admin review', async () => {
       const res = await request(app)
         .post('/api/bot/submissions')
         .set('x-bot-api-key', config.bot.apiKey)
@@ -108,8 +108,8 @@ describe('Relationship Awareness API Test Suite', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.status).toBe(SubmissionStatus.READY_TO_PUBLISH);
-      expect(res.body.data.isEligibleForAutoPublish).toBe(true);
+      expect(res.body.data.status).toBe(SubmissionStatus.PENDING_REVIEW);
+      expect(res.body.data.isEligibleForAutoPublish).toBe(false);
       testSubmissionId = res.body.data.id;
     });
 
