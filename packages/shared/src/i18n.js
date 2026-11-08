@@ -47,7 +47,7 @@ export const i18n = {
       contentLabel: "Public Text Preview",
       confirmPrompt: "Are you ready to submit this for publishing / review?",
       submittedSuccessAuto: "✅ Your submission has been received and verified! It has been scheduled for publication on our Telegram channel.",
-      submittedSuccessReview: "⏳ Your submission has been received! Because it contains sensitive details or safety concerns, it has been forwarded to our moderation team for human review.",
+      submittedSuccessReview: "⏳ Your submission has been received! It has been scheduled for publication on our Telegram channel.",
       cancelled: "❌ Action cancelled. Returning to main menu.",
       mySubmissionsEmpty: "You have not submitted any questions or reports yet.",
       noDirectIdentifiablePhotos: "⚠️ Photos containing identifiable faces are kept private for evidence and will not be posted publicly."
