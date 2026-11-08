@@ -1,0 +1,17 @@
+# Ignore local env files so Render's env vars take effect in production
+apps/api/.env
+apps/api/.env.local
+apps/api/.env.development
+apps/bot/.env
+apps/bot/.env.local
+
+# Dev artifacts
+node_modules
+**/node_modules
+npm-debug.log*
+.DS_Store
+
+# Local storage and test artifacts
+apps/api/storage
+**/dist
+

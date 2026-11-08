@@ -59,8 +59,8 @@ describe('Publishing Pipeline & Telegram Channel Integration Tests', () => {
     expect(publication).toBeDefined();
     expect(publication.submissionId).toBe(testSubmission.id);
     expect(publication.status).toBe('ACTIVE');
-    expect(publication.postText).toContain('ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል አግኙ::');
-    expect(publication.postText).toContain('❗️❗️እንጠንቀቅ');
+    expect(publication.postText).toContain('ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል ላኪልን::');
+    expect(publication.postText).toContain('❗️ ❗️ እንጠንቀቅ');
 
     // Verify submission record updated
     const updatedSub = await prisma.submission.findUnique({

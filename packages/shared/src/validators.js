@@ -26,14 +26,17 @@ export function validateSubmissionText(text = '', hasPhoto = false) {
   return { isValid: true, errorKey: null, message: null };
 }
 
-export const POST_FOOTER = `ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል አግኙ::\n\n❗️❗️እንጠንቀቅ`;
+export const POST_FOOTER_AM = `ማንኛውም መረጃ ወይም ወሬ ካላሽ በ @tawkiwalesh_bot በኩል ላኪልን::\n\n❗️ ❗️ እንጠንቀቅ`;
+export const POST_FOOTER_EN = `If you have any info or news, send it to us via @tawkiwalesh_bot::\n\n❗️ ❗️ Be careful`;
+export const POST_FOOTER = POST_FOOTER_AM;
 
 /**
  * Format a channel publication message with user text followed by standard community footer
  */
-export function formatPublicationPost({ publicContent }) {
+export function formatPublicationPost({ publicContent, language = 'am' }) {
   const content = (publicContent || '').trim();
-  return `${content}\n\n${POST_FOOTER}`;
+  const footer = language === 'en' ? POST_FOOTER_EN : POST_FOOTER_AM;
+  return `${content}\n\n${footer}`;
 }
 
 /**
@@ -42,4 +45,3 @@ export function formatPublicationPost({ publicContent }) {
 export function isSupportedLanguage(lang) {
   return Object.values(SupportedLanguages).includes(lang);
 }
-
