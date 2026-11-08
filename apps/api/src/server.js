@@ -5,6 +5,52 @@ import { startKeepAlive } from './jobs/keepAlive.js';
 
 let botInstance = null;
 
+/**
+ * Launch the embedded Telegram bot. If the first attempt fails (e.g. because
+ * Render's network is not yet fully ready right after a cold start), retry up
+ * to MAX_RETRIES times with exponential back-off before giving up.
+ */
+async function launchBotWithRetry(token, attempt = 1) {
+  const MAX_RETRIES = 5;
+  const BACKOFF_MS = [0, 5000, 15000, 30000, 60000]; // delays before each attempt
+
+  const delay = BACKOFF_MS[attempt - 1] || 60000;
+  if (delay > 0) {
+    console.log(`🤖 Bot launch attempt ${attempt}/${MAX_RETRIES} in ${delay / 1000}s...`);
+    await new Promise((r) => setTimeout(r, delay));
+  }
+
+  try {
+    console.log(`🤖 Starting embedded Telegram Bot (attempt ${attempt})...`);
+    process.env.IS_EMBEDDED_BOT = 'true';
+    const { createBot } = await import('../../bot/src/index.js');
+
+    // Stop any previous stale instance before creating a new one
+    if (botInstance) {
+      try { botInstance.stop('RESTART'); } catch {}
+      botInstance = null;
+    }
+
+    botInstance = createBot(token);
+    await new Promise((resolve, reject) => {
+      botInstance.launch(() => {
+        console.log('🤖 Embedded Telegram Bot started successfully and listening for messages');
+        global.__BOT_STATUS__ = { started: true, error: null, attempt, timestamp: new Date().toISOString() };
+        resolve();
+      }).catch(reject);
+    });
+  } catch (err) {
+    const msg = err?.message || String(err);
+    console.error(`🤖 Bot launch attempt ${attempt} failed: ${msg}`);
+    global.__BOT_STATUS__ = { started: false, error: `Launch failed (attempt ${attempt}): ${msg}`, timestamp: new Date().toISOString() };
+
+    if (attempt < MAX_RETRIES) {
+      return launchBotWithRetry(token, attempt + 1);
+    }
+    console.error('🤖 All bot launch attempts exhausted. Bot will NOT be active.');
+  }
+}
+
 const server = app.listen(config.port, async () => {
   console.log(`🚀 Relationship Awareness API running on port ${config.port} [${config.env}]`);
   console.log(`📡 Health Check: http://localhost:${config.port}/health`);
@@ -12,24 +58,7 @@ const server = app.listen(config.port, async () => {
   // Optionally launch embedded Telegram Bot if configured to run inside API service (saves extra worker cost)
   if (config.embeddedBot) {
     if (config.bot.token && !config.bot.token.includes('SAMPLE_TOKEN')) {
-      try {
-        console.log('🤖 Starting embedded Telegram Bot inside API service...');
-        process.env.IS_EMBEDDED_BOT = 'true';
-        const { createBot } = await import('../../bot/src/index.js');
-        botInstance = createBot(config.bot.token);
-        botInstance.launch(
-          () => {
-            console.log('🤖 Embedded Telegram Bot started successfully and listening for messages');
-            global.__BOT_STATUS__ = { started: true, error: null, timestamp: new Date().toISOString() };
-          }
-        ).catch((err) => {
-          console.error('Failed to launch embedded bot:', err.message);
-          global.__BOT_STATUS__ = { started: false, error: `Launch failed: ${err.message}`, timestamp: new Date().toISOString() };
-        });
-      } catch (err) {
-        console.error('Failed to load embedded Telegram bot:', err.message);
-        global.__BOT_STATUS__ = { started: false, error: `Import failed: ${err.message}`, timestamp: new Date().toISOString() };
-      }
+      launchBotWithRetry(config.bot.token);
     } else {
       console.log('ℹ️ RUN_EMBEDDED_BOT is enabled, but TELEGRAM_BOT_TOKEN is not configured or is a placeholder.');
       global.__BOT_STATUS__ = { started: false, error: 'Token missing or placeholder', timestamp: new Date().toISOString() };
