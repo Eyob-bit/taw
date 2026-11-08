@@ -1,6 +1,7 @@
 import app from './app.js';
 import { config } from './config/index.js';
 import prisma from './services/prisma.js';
+import { startKeepAlive } from './jobs/keepAlive.js';
 
 let botInstance = null;
 
@@ -36,6 +37,9 @@ const server = app.listen(config.port, async () => {
   } else {
     global.__BOT_STATUS__ = { started: false, error: 'RUN_EMBEDDED_BOT is not true', timestamp: new Date().toISOString() };
   }
+
+  // Keep the Render free-tier instance alive so the embedded bot never goes to sleep
+  startKeepAlive(config.apiBaseUrl);
 });
 
 // Graceful shutdown
