@@ -9,45 +9,59 @@ let botInstance = null;
  * Launch the embedded Telegram bot. If the first attempt fails (e.g. because
  * Render's network is not yet fully ready right after a cold start), retry up
  * to MAX_RETRIES times with exponential back-off before giving up.
+ *
+ * NOTE: Telegraf's launch() returns a Promise that NEVER resolves (it is an
+ * infinite polling loop). We use the onLaunch callback (1st arg) to detect
+ * success; errors propagate via the .catch() on the launch promise.
  */
 async function launchBotWithRetry(token, attempt = 1) {
   const MAX_RETRIES = 5;
-  const BACKOFF_MS = [0, 5000, 15000, 30000, 60000]; // delays before each attempt
+  const BACKOFF_MS = [0, 5000, 15000, 30000, 60000]; // delay before each attempt
 
-  const delay = BACKOFF_MS[attempt - 1] || 60000;
+  const delay = BACKOFF_MS[attempt - 1] ?? 60000;
   if (delay > 0) {
-    console.log(`🤖 Bot launch attempt ${attempt}/${MAX_RETRIES} in ${delay / 1000}s...`);
+    console.log(`🤖 Bot launch attempt ${attempt}/${MAX_RETRIES} – waiting ${delay / 1000}s...`);
     await new Promise((r) => setTimeout(r, delay));
+  }
+
+  // Stop any stale instance before creating a fresh one
+  if (botInstance) {
+    try { botInstance.stop('RESTART'); } catch {}
+    botInstance = null;
   }
 
   try {
     console.log(`🤖 Starting embedded Telegram Bot (attempt ${attempt})...`);
     process.env.IS_EMBEDDED_BOT = 'true';
     const { createBot } = await import('../../bot/src/index.js');
-
-    // Stop any previous stale instance before creating a new one
-    if (botInstance) {
-      try { botInstance.stop('RESTART'); } catch {}
-      botInstance = null;
-    }
-
     botInstance = createBot(token);
-    await new Promise((resolve, reject) => {
-      botInstance.launch(() => {
-        console.log('🤖 Embedded Telegram Bot started successfully and listening for messages');
-        global.__BOT_STATUS__ = { started: true, error: null, attempt, timestamp: new Date().toISOString() };
-        resolve();
-      }).catch(reject);
+
+    // launch() never resolves – attach error handler separately
+    botInstance.launch(() => {
+      // This fires once getMe() succeeds and polling starts
+      console.log('🤖 Embedded Telegram Bot started successfully and listening for messages');
+      global.__BOT_STATUS__ = { started: true, error: null, attempt, timestamp: new Date().toISOString() };
+    }).catch(async (err) => {
+      const msg = err?.message || String(err);
+      console.error(`🤖 Bot polling error (attempt ${attempt}): ${msg}`);
+      global.__BOT_STATUS__ = { started: false, error: `Polling failed (attempt ${attempt}): ${msg}`, timestamp: new Date().toISOString() };
+
+      if (attempt < MAX_RETRIES) {
+        await launchBotWithRetry(token, attempt + 1);
+      } else {
+        console.error('🤖 All bot launch attempts exhausted. Bot will NOT be active.');
+      }
     });
   } catch (err) {
     const msg = err?.message || String(err);
-    console.error(`🤖 Bot launch attempt ${attempt} failed: ${msg}`);
-    global.__BOT_STATUS__ = { started: false, error: `Launch failed (attempt ${attempt}): ${msg}`, timestamp: new Date().toISOString() };
+    console.error(`🤖 Bot import/create failed (attempt ${attempt}): ${msg}`);
+    global.__BOT_STATUS__ = { started: false, error: `Import failed (attempt ${attempt}): ${msg}`, timestamp: new Date().toISOString() };
 
     if (attempt < MAX_RETRIES) {
-      return launchBotWithRetry(token, attempt + 1);
+      await launchBotWithRetry(token, attempt + 1);
+    } else {
+      console.error('🤖 All bot launch attempts exhausted. Bot will NOT be active.');
     }
-    console.error('🤖 All bot launch attempts exhausted. Bot will NOT be active.');
   }
 }
 
