@@ -104,7 +104,7 @@ export const i18n = {
       contentLabel: "ለህዝብ የሚታይ ጽሁፍ",
       confirmPrompt: "ይህ ጽሁፍ እንዲለጠፍ/እንዲገመገም ዝግጁ ነዎት?",
       submittedSuccessAuto: "✅ ጽሁፍዎ ተቀባይነት አግኝቷል! በቴሌግራም ቻናላችን ላይ ለመለጠፍ ተመድቧል።",
-      submittedSuccessReview: "⏳ ጽሁፍዎ ደርሶናል! ጥንቃቄ የሚሹ መረጃዎችን የያዘ በመሆኑ በአወያዮቻችን ተገምግሞ ምላሽ ይሰጥዎታል።",
+      submittedSuccessReview: "⏳ ጽሁፍዎ ደርሶናል! በቴሌግራም ቻናላችን ላይ ለመለጠፍ ተመድቧል።",
       cancelled: "❌ ሂደቱ ተሰርዟል። ወደ ዋናው ማውጫ ተመልሰዋል።",
       mySubmissionsEmpty: "እስካሁን ያቀረቡት ምንም አይነት ጥያቄ ወይም ጽሁፍ የለም።",
       noDirectIdentifiablePhotos: "⚠️ የሰው ፊት በግልጽ የሚያሳዩ ፎቶዎች ለማስረጃነት ብቻ ተይዘው ለህዝብ አይለጠፉም።"
